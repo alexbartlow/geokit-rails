@@ -61,7 +61,8 @@ There are some defaults you can override:
                        :default_formula => :sphere, 
                        :distance_field_name => :distance,
                        :lat_column_name => :lat,
-                       :lng_column_name => :lng
+                       :lng_column_name => :lng,
+                       :spatial_column_name => :geom
     end
 
 
@@ -76,8 +77,13 @@ been retrieved throw a Geokit location query. By default, these fields are
 known as "distance" but this can be changed through the `:distance_field_name` key.  
 
 You can also define alternative column names for latitude and longitude using
-the `:lat_column_name` and `:lng_column_name` keys.  The defaults are 'lat' and
-'lng' respectively.
+the `:lat_column_name` and `:lng_column_name` keys.  The defaults are 'lat' 
+and 'lng' respectively.
+
+You can also define a spatial column name, and if your database adapter
+supports it, geokit-rails will attempt to use that column for its bounding
+box. This is significantly faster than using lat/long, due to specialized
+database index types.
 
 Once you've specified acts_as_mappable, a set of distance-based 
 finder methods are available:
@@ -508,6 +514,19 @@ Geokit plugin the migration would be as follows.
         remove_index  :pages, [:lat, :lng]
       end
     end
+    
+In MySQL, you can use the native geometry functions to greatly increase 
+performance. To do this, you simply need a geometry column, named by default 
+'geom'.
+
+    class AddIndexToPageGeom < ActiveRecord::Migration
+      # assuming create table with t.column :geom, :geometry
+      def self.up
+        add_index :pages, :geom
+      end
+      def self.down
+        remove_index :pages, :geom
+      end
 
 ## Database Compatability
 
