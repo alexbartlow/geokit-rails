@@ -26,6 +26,7 @@ module Geokit
         raise NotImplementedError, '#flat_distance_sql is not implemented'
       end
       
+      def supports_spacial_column? ; false ; end
     end
   end
 end

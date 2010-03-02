@@ -17,6 +17,13 @@ module Geokit
          |
       end
       
+      def supports_spatial_column?
+        true
+      end
+      
+      def spacial_column_data(lat, lng)
+        "GeomFromText('POINT(#{lat} #{lng})')"
+      end
     end
   end
 end

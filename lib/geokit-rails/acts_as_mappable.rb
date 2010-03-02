@@ -63,22 +63,25 @@ module Geokit
 
         if reflection = Geokit::ActsAsMappable.end_of_reflection_chain(self.through, self)
           metaclass.instance_eval do
-            [ :distance_column_name, :default_units, :default_formula, :lat_column_name, :lng_column_name, :qualified_lat_column_name, :qualified_lng_column_name ].each do |method_name|
+            [ :distance_column_name, :default_units, :default_formula, :lat_column_name, :lng_column_name, :qualified_lat_column_name, :qualified_lng_column_name, :qualified_spatial_column_name, 
+              :spatial_column_name ].each do |method_name|
               define_method method_name do
                 reflection.klass.send(method_name)
               end
             end
           end
         else
-          cattr_accessor :distance_column_name, :default_units, :default_formula, :lat_column_name, :lng_column_name, :qualified_lat_column_name, :qualified_lng_column_name
+          cattr_accessor :distance_column_name, :default_units, :default_formula, :lat_column_name, :lng_column_name, :qualified_lat_column_name, :qualified_lng_column_name, :spatial_column_name, :qualified_spatial_column_name
 
           self.distance_column_name = options[:distance_column_name]  || 'distance'
           self.default_units = options[:default_units] || Geokit::default_units
           self.default_formula = options[:default_formula] || Geokit::default_formula
           self.lat_column_name = options[:lat_column_name] || 'lat'
           self.lng_column_name = options[:lng_column_name] || 'lng'
+          self.spatial_column_name = options[:spatial_column_name] || 'geom'
           self.qualified_lat_column_name = "#{table_name}.#{lat_column_name}"
           self.qualified_lng_column_name = "#{table_name}.#{lng_column_name}"
+          self.qualified_spatial_column_name = "#{table_name}.#{spatial_column_name}"
 
           if options.include?(:auto_geocode) && options[:auto_geocode]
             # if the form auto_geocode=>true is used, let the defaults take over by suppling an empty hash
@@ -87,10 +90,21 @@ module Geokit
             self.auto_geocode_field = options[:auto_geocode][:field] || 'address'
             self.auto_geocode_error_message = options[:auto_geocode][:error_message] || 'could not locate address'
 
-            # set the actual callback here
+            # set the actual callbacks here
             before_validation_on_create :auto_geocode_address
+            before_save :assign_spatial_column
           end
         end
+      end
+    end
+    
+    def assign_spatial_column
+      if self.class.supports_spatial_column?
+        self.send("#{spatial_column_name}=", 
+          self.adapter.spatial_column_data(
+            self.send(lat_column_name),
+            self.send(lng_column_name)
+          ))
       end
     end
 
@@ -236,6 +250,13 @@ module Geokit
         end
         sql
       end
+      
+      # returns true if the database has a spatial column.
+      def supports_spatial_column?
+        adapter.supports_spatial_column? && 
+        column_names.include?(spatial_column_name)
+      end
+      
 
       private
 
@@ -340,12 +361,20 @@ module Geokit
             options[:conditions] = merge_conditions(options[:conditions], distance_condition)
           end
         end
-
+      
         # Alters the conditions to include rectangular bounds conditions.
         def apply_bounds_conditions(options,bounds)
           sw,ne = bounds.sw, bounds.ne
+          bounds_sql = if supports_spatial_column? 
+            "MBRContains(
+              GeomFromText(
+                'LineString(#{sw.lat} #{sw.lng}, #{ne.lat} #{ne.lng})'
+              )
+            ,#{qualified_spatial_column_name})"
+          else
           lng_sql = bounds.crosses_meridian? ? "(#{qualified_lng_column_name}<#{ne.lng} OR #{qualified_lng_column_name}>#{sw.lng})" : "#{qualified_lng_column_name}>#{sw.lng} AND #{qualified_lng_column_name}<#{ne.lng}"
-          bounds_sql = "#{qualified_lat_column_name}>#{sw.lat} AND #{qualified_lat_column_name}<#{ne.lat} AND #{lng_sql}"
+          "#{qualified_lat_column_name}>#{sw.lat} AND #{qualified_lat_column_name}<#{ne.lat} AND #{lng_sql}"
+          end
           options[:conditions] = merge_conditions(options[:conditions], bounds_sql)
         end
 
