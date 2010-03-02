@@ -1,6 +1,9 @@
 module Geokit
   module Adapters
     class MySQL < Abstract
+      class SafeGeoString < String
+        
+      end
       
       def sphere_distance_sql(lat, lng, multiplier)
         %|
@@ -21,8 +24,21 @@ module Geokit
         true
       end
       
-      def spacial_column_data(lat, lng)
-        "GeomFromText('POINT(#{lat} #{lng})')"
+      require 'active_record/connection_adapters/mysql_adapter'
+
+      ActiveRecord::ConnectionAdapters::MysqlAdapter.class_eval do
+        def quote_with_geometry(value, column = nil)
+          if value.kind_of?(SafeGeoString)
+            value
+          else
+            quote_without_geometry(value,column)
+          end
+        end
+        alias_method_chain :quote, :geometry
+      end
+      
+      def spatial_column_data(lat, lng)
+        SafeGeoString.new(%{GeomFromText('POINT(#{lat} #{lng})')})
       end
     end
   end

@@ -411,6 +411,25 @@ class ActsAsMappableTest < GeokitTestCase
     assert_equal 2, locations
   end
   
+  def test_should_support_spatial_column
+    assert SpatialLocation.supports_spatial_column?, 
+      "Expected support spatial column"
+      
+    assert SpatialLocation.first.class.supports_spatial_column?
+  end
+  
+  def test_find_within_bounds_spatial
+    # build geometry column
+    SpatialLocation.find_each {|x| x.save}
+    
+    assert !SpatialLocation.first.geom.nil?, "Expected build spatial column"
+    
+    locations = SpatialLocation.find_within_bounds([@sw, @ne])
+    assert_equal 2, locations.size
+    locations = SpatialLocation.count_within_bounds([@sw,@ne])
+    assert_equal 2, locations
+  end
+  
   def test_find_within_bounds_ordered_by_distance
     locations = Location.find_within_bounds([@sw,@ne], :origin=>@bounds_center, :order=>'distance asc')
     assert_equal locations[0], locations(:d)

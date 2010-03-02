@@ -83,6 +83,8 @@ module Geokit
           self.qualified_lng_column_name = "#{table_name}.#{lng_column_name}"
           self.qualified_spatial_column_name = "#{table_name}.#{spatial_column_name}"
 
+          before_validation :assign_spatial_column if self.supports_spatial_column?
+
           if options.include?(:auto_geocode) && options[:auto_geocode]
             # if the form auto_geocode=>true is used, let the defaults take over by suppling an empty hash
             options[:auto_geocode] = {} if options[:auto_geocode] == true 
@@ -92,20 +94,16 @@ module Geokit
 
             # set the actual callbacks here
             before_validation_on_create :auto_geocode_address
-            before_save :assign_spatial_column
           end
         end
       end
     end
     
     def assign_spatial_column
-      if self.class.supports_spatial_column?
-        self.send("#{spatial_column_name}=", 
-          self.adapter.spatial_column_data(
-            self.send(lat_column_name),
-            self.send(lng_column_name)
-          ))
-      end
+      self.send("#{spatial_column_name}=",
+        self.class.adapter.spatial_column_data(
+          self.send(lat_column_name),
+          self.send(lng_column_name)))
     end
 
     # this is the callback for auto_geocoding
@@ -366,11 +364,7 @@ module Geokit
         def apply_bounds_conditions(options,bounds)
           sw,ne = bounds.sw, bounds.ne
           bounds_sql = if supports_spatial_column? 
-            "MBRContains(
-              GeomFromText(
-                'LineString(#{sw.lat} #{sw.lng}, #{ne.lat} #{ne.lng})'
-              )
-            ,#{qualified_spatial_column_name})"
+            "MBRContains(GeomFromText('LineString(#{sw.lat} #{sw.lng}, #{ne.lat} #{ne.lng})'),#{qualified_spatial_column_name})"
           else
           lng_sql = bounds.crosses_meridian? ? "(#{qualified_lng_column_name}<#{ne.lng} OR #{qualified_lng_column_name}>#{sw.lng})" : "#{qualified_lng_column_name}>#{sw.lng} AND #{qualified_lng_column_name}<#{ne.lng}"
           "#{qualified_lat_column_name}>#{sw.lat} AND #{qualified_lat_column_name}<#{ne.lat} AND #{lng_sql}"
